@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D Rubik's Cube - Advanced Mirror</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #121212;
+            color: white;
+            touch-action: none;
+        }
+        h1 { margin-bottom: 20px; }
+        
+        /* Layout for the cube and side stickers */
+        .cube-wrapper {
+            display: grid;
+            grid-template-columns: 40px 310px 40px;
+            grid-template-rows: 40px 310px 40px;
+            gap: 10px;
+            align-items: center;
+            justify-items: center;
+        }
+
+        .grid {
+            grid-column: 2;
+            grid-row: 2;
+            display: grid;
+            grid-template-columns: repeat(3, 100px);
+            grid-template-rows: repeat(3, 100px);
+            gap: 8px;
+            background-color: transparent; /* No black background block */
+            padding: 5px;
+            user-select: none;
+        }
+
+        /* The 9 middle squares are styled as clean, distinct white tiles */
+        .cell {
+            width: 100px;
+            height: 100px;
+            background-color: #ffffff;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: #000;
+            transition: transform 0.4s;
+            box-sizing: border-box;
+            /* Soft shadow and subtle edge to make them stand out as individual white squares */
+            box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1), 0 4px 10px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Side Sticker Containers - Kept original (other squares stay the same) */
+        .side-row { display: flex; gap: 5px; }
+        .side-col { display: flex; flex-direction: column; gap: 5px; }
+
+        .sticker-side {
+            width: 100px;
+            height: 30px;
+            border-radius: 4px;
+            transition: background-color 0.3s, transform 0.4s;
+        }
+        .sticker-side.vertical {
+            width: 30px;
+            height: 100px;
+        }
+
+        .top-stickers { grid-column: 2; grid-row: 1; }
+        .bottom-stickers { grid-column: 2; grid-row: 3; }
+        .left-stickers { grid-column: 1; grid-row: 2; }
+        .right-stickers { grid-column: 3; grid-row: 2; }
+
+        .controls {
+            margin-top: 30px;
+            display: flex;
+            gap: 15px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #333;
+            color: white;
+            border: 1px solid #555;
+            border-radius: 4px;
+        }
+        button:hover {
+            background-color: #444;
+        }
+        .instructions {
+            margin-top: 20px;
+            max-width: 500px;
+            text-align: center;
+            color: #aaa;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>2D Rubik's Mirror</h1>
+
+    <div class="cube-wrapper">
+        <div class="side-row top-stickers" id="side-top"></div>
+        
+        <div class="side-col left-stickers" id="side-left"></div>
+        
+        <div id="grid" class="grid"></div>
+        
+        <div class="side-col right-stickers" id="side-right"></div>
+        
+        <div class="side-row bottom-stickers" id="side-bottom"></div>
+    </div>
+
+    <div class="controls">
+        <button onclick="shuffle()">Shuffle</button>
+        <button onclick="resetGame()">Reset</button>
+    </div>
+
+    <div class="instructions">
+        Swipe a row or column to mirror it. <br>
+        The <b>outer stickers</b> represent the hidden faces of the corners (3 colors) and edges (2 colors). <br>
+        When you mirror a row/column, the front face swaps with the back (White), and the side stickers rotate!
+    </div>
+
+    <script>
+        const COLORS = {
+            FRONT: '#FFFFFF', // White
+            BACK: '#FFFFFF',  // White (Yellow replaced with White)
+            TOP: '#009E60',   // Green
+            BOTTOM: '#0051BA',// Blue
+            LEFT: '#FF5800',  // Orange
+            RIGHT: '#C41E3A'  // Red
+        };
+
+        const size = 3;
+        let grid = []; // 3x3 array of pieces
+        
+        function createPiece(r, c) {
+            return {
+                faces: {
+                    front: COLORS.FRONT,
+                    back: COLORS.BACK,
+                    top: COLORS.TOP,
+                    bottom: COLORS.BOTTOM,
+                    left: COLORS.LEFT,
+                    right: COLORS.RIGHT
+                },
+                type: (r === 1 && c === 1) ? 'center' : ((r + c) % 2 === 0 ? 'corner' : 'edge')
+            };
+        }
+
+        function initGrid() {
+            grid = [];
+            for (let r = 0; r < size; r++) {
+                grid[r] = [];
+                for (let c = 0; c < size; c++) {
+                    grid[r][c] = createPiece(r, c);
+                }
+            }
+            render();
+        }
+
+        function render() {
+            const gridEl = document.getElementById('grid');
+            const topEl = document.getElementById('side-top');
+            const bottomEl = document.getElementById('side-bottom');
+            const leftEl = document.getElementById('side-left');
+            const rightEl = document.getElementById('side-right');
+
+            gridEl.innerHTML = '';
+            topEl.innerHTML = '';
+            bottomEl.innerHTML = '';
+            leftEl.innerHTML = '';
+            rightEl.innerHTML = '';
+
+            for (let r = 0; r < size; r++) {
+                for (let c = 0; c < size; c++) {
+                    const piece = grid[r][c];
+                    
+                    // Front Face
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.style.backgroundColor = piece.faces.front;
+                    cell.dataset.r = r;
+                    cell.dataset.c = c;
+                    gridEl.appendChild(cell);
+
+                    // Side Stickers
+                    if (r === 0) {
+                        const s = createSticker(piece.faces.top, false);
+                        topEl.appendChild(s);
+                    }
+                    if (r === 2) {
+                        const s = createSticker(piece.faces.bottom, false);
+                        bottomEl.appendChild(s);
+                    }
+                    if (c === 0) {
+                        const s = createSticker(piece.faces.left, true);
+                        leftEl.appendChild(s);
+                    }
+                    if (c === 2) {
+                        const s = createSticker(piece.faces.right, true);
+                        rightEl.appendChild(s);
+                    }
+                }
+            }
+        }
+
+        function createSticker(color, isVertical) {
+            const div = document.createElement('div');
+            div.className = 'sticker-side' + (isVertical ? ' vertical' : '');
+            div.style.backgroundColor = color;
+            return div;
+        }
+
+        // --- Mirroring Logic ---
+
+        function mirrorRow(r) {
+            const row = grid[r];
+            row.forEach(piece => {
+                let temp = piece.faces.front;
+                piece.faces.front = piece.faces.back;
+                piece.faces.back = temp;
+                
+                temp = piece.faces.left;
+                piece.faces.left = piece.faces.right;
+                piece.faces.right = temp;
+            });
+            row.reverse();
+            render();
+        }
+
+        function mirrorCol(c) {
+            const col = [grid[0][c], grid[1][c], grid[2][c]];
+            
+            col.forEach(piece => {
+                let temp = piece.faces.front;
+                piece.faces.front = piece.faces.back;
+                piece.faces.back = temp;
+                
+                temp = piece.faces.top;
+                piece.faces.top = piece.faces.bottom;
+                piece.faces.bottom = temp;
+            });
+            
+            const reversed = [...col].reverse();
+            grid[0][c] = reversed[0];
+            grid[1][c] = reversed[1];
+            grid[2][c] = reversed[2];
+            render();
+        }
+
+        // --- Swipe Detection ---
+        let startX, startY, startR, startC;
+
+        document.getElementById('grid').addEventListener('mousedown', startDrag);
+        document.getElementById('grid').addEventListener('touchstart', startDrag, { passive: false });
+
+        function startDrag(e) {
+            const touch = e.touches ? e.touches[0] : e;
+            startX = touch.clientX;
+            startY = touch.clientY;
+            const target = document.elementFromPoint(startX, startY);
+            const cell = target.closest('.cell');
+            if (cell) {
+                startR = parseInt(cell.dataset.r);
+                startC = parseInt(cell.dataset.c);
+            }
+        }
+
+        window.addEventListener('mouseup', endDrag);
+        window.addEventListener('touchend', endDrag);
+
+        function endDrag(e) {
+            if (startR === undefined) return;
+            const touch = e.changedTouches ? e.changedTouches[0] : e;
+            const dx = touch.clientX - startX;
+            const dy = touch.clientY - startY;
+            const threshold = 30;
+
+            if (Math.abs(dx) > Math.abs(dy)) {
+                if (Math.abs(dx) > threshold) mirrorRow(startR);
+            } else {
+                if (Math.abs(dy) > threshold) mirrorCol(startC);
+            }
+            startR = undefined;
+        }
+
+        function shuffle() {
+            for (let i = 0; i < 15; i++) {
+                const isRow = Math.random() > 0.5;
+                const idx = Math.floor(Math.random() * 3);
+                if (isRow) mirrorRow(idx);
+                else mirrorCol(idx);
+            }
+        }
+
+        function resetGame() {
+            initGrid();
+        }
+
+        initGrid();
+    </script>
+</body>
+</html>
